@@ -266,16 +266,17 @@ class Trainer(object):
         model.train()
 
         for idx, batch in enumerate(train_dataloader):
-            preds = self._calc_single_batch(model=model, batch=batch)
-            label = torch.stack(batch[-1])
+            is_accumulating = idx % self.grad_accum_steps != 0
 
-            loss = F.cross_entropy(preds, label)
+            with self.fabric.no_backward_sync(model, enabled=is_accumulating):
+                preds = self._calc_single_batch(model=model, batch=batch)
+                label = torch.stack(batch[-1])
 
-            self.fabric.backward(loss)
+                loss = F.cross_entropy(preds, label)
 
-            if (idx + 1) % self.grad_accum_steps == 0 or (idx + 1) == len(
-                train_dataloader
-            ):
+                self.fabric.backward(loss)
+
+            if not is_accumulating:
                 optimizer.step()
                 optimizer.zero_grad()
 

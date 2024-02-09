@@ -38,13 +38,14 @@ class SupportTicketDataset(td.Dataset):
             text,
             truncation=do_truncate,
             padding=padding,
+            max_length=self.context_length,
             add_special_tokens=add_special_tokens,
             return_tensors="pt",
         )
 
         return (
-            tokenized_results["input_ids"].flatten(),
-            tokenized_results["attention_mask"].flatten(),
+            tokenized_results["input_ids"].reshape(-1),
+            tokenized_results["attention_mask"].reshape(-1),
         )
 
     def _split_overlapping_tokens(
@@ -86,7 +87,10 @@ class SupportTicketDataset(td.Dataset):
 
         if self.is_bert_based:
             for i in range(len(tensor_chunks)):
-                pad_len = self.context_length - tensor_chunks[i].size(0)
+                pad_len = self.context_length - tensor_chunks[i].size(-1)
+                print(
+                    f"Context length: {self.context_length}, Input length: {tensor_chunks[i].size(-1)}, Pad length: {pad_len}"
+                )
 
                 if pad_len > 0:
                     tensor_chunks[i] = torch.cat(
@@ -122,7 +126,7 @@ class SupportTicketDataset(td.Dataset):
 
         token_len = input_ids.size(0)
 
-        if token_len > self.context_length:
+        if token_len >= self.context_length:
 
             input_ids_chunks = self._split_overlapping_tokens(
                 tensor=input_ids, chunk_size=510, stride=510, minimal_chunk_length=1
@@ -134,6 +138,14 @@ class SupportTicketDataset(td.Dataset):
                 stride=510,
                 minimal_chunk_length=1,
             )
+
+            assert all(
+                [x.size(-1) <= 512 for x in input_ids_chunks]
+            ), "Found chunks in the input_ids chunks where the length is greater than the context length"
+
+            assert all(
+                [x.size(-1) <= 512 for x in attention_mask_chunks]
+            ), "Found chunks in the attention_mask chunks where the length is greater than the context length"
 
             input_ids_chunks, attention_mask_chunks = self._add_special_tokens(
                 tensor_chunks=input_ids_chunks, mask_chunks=attention_mask_chunks
@@ -147,17 +159,39 @@ class SupportTicketDataset(td.Dataset):
                 tensor_chunks=input_ids_chunks, mask_chunks=attention_mask_chunks
             )
 
+            assert (
+                input_ids.size(-1) <= 512
+            ), f"Expected input_ids to have context length : {self.context_length}. Found {input_ids.size()} -- chunk section"
+
+            assert (
+                input_ids.size(-1) <= 512
+            ), f"Expected attention_mask to have context length : {self.context_length}. Found {attention_mask.size()} -- chunk section"
+
         else:
-            input_ids, attention_mask = self._tokenize_text(
-                text=clean_text, do_truncate=False, do_pad=True, add_special_tokens=True
+
+            input_ids, attention_mask = self._add_special_tokens(
+                tensor_chunks=[input_ids], mask_chunks=[attention_mask]
+            )
+            print("Before Pad: ", input_ids[0].shape)
+
+            input_ids, attention_mask = self._add_padding_tokens(
+                tensor_chunks=input_ids, mask_chunks=attention_mask
+            )
+            print("After Pad: ", input_ids[0].shape)
+
+            input_ids, attention_mask = self._stack_all_tensors(
+                tensor_chunks=input_ids, mask_chunks=attention_mask
             )
 
-            input_ids, attention_mask = (
-                input_ids.reshape(1, -1).long(),
-                attention_mask.reshape(1, -1).int(),
-            )
+            if input_ids.size(-1) > 512:
+                print(clean_text)
 
-        if input_ids.size(-1) > 512:
-            print(input_ids.shape, attention_mask.shape)
+            assert (
+                input_ids.size(-1) <= 512
+            ), f"Expected input_ids to have context length : {self.context_length}. Found {input_ids.size()} -- token_len"
+
+            assert (
+                attention_mask.size(-1) <= 512
+            ), f"Expected attention_mask to have context length : {self.context_length}. Found {attention_mask.size()} -- token_len"
 
         return input_ids, attention_mask, torch.tensor(label).long()
