@@ -4,3 +4,4 @@
 **/models/
 test.py
 **/dataset/
+**/wandb/
