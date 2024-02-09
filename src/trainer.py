@@ -327,9 +327,14 @@ class Trainer(object):
                 self.logger.log({"train_step_loss": loss})
 
             losses.append(loss.item())
-            self.progress_bar.update(
-                task, advance=1, train_step_status=f"train_step_loss: {loss.item():.3f}"
-            )
+
+            loss_gathered = self.fabric.all_gather(loss)
+            if self.fabric.global_rank == 0:
+                self.progress_bar.update(
+                    task,
+                    advance=1,
+                    train_step_status=f"train_step_loss: {loss_gathered.float().mean().item():.3f}",
+                )
 
         return np.mean(losses)
 

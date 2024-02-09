@@ -149,6 +149,14 @@ if __name__ == "__main__":
         help="what type of precision to use for training.",
     )
 
+    parser.add_argument(
+        "--gpu_strategy",
+        type=str,
+        required=False,
+        default="auto",
+        help="type of strategy to apply for multi-gpu training.",
+    )
+
     args = parser.parse_args()
 
     data_path = args.data_path
@@ -168,6 +176,7 @@ if __name__ == "__main__":
     n_devices = args.n_devices
     accelerator = args.accelerator
     precision_strategy = args.precision_strategy
+    gpu_strategy = args.gpu_strategy
 
     assert use_wandb in [0, 1], "Expected use_wandb to be either 0/1"
 
@@ -253,6 +262,7 @@ if __name__ == "__main__":
     trainer = Trainer(
         accelerator=accelerator,
         devices=n_devices,
+        strategy=gpu_strategy,
         precision=precision_strategy,
         optimizer_name="adam",
         optimizer_kwargs={"betas": (0.9, 0.999), "lr": lr},
