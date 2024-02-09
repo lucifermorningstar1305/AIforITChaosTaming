@@ -227,15 +227,15 @@ class Trainer(object):
 
                 train_loss_gathered = self.fabric.all_gather(train_loss)
 
+                state = {"model": model, "optimizer": optimizer, "iteration": epoch}
+                self.fabric.save(ckpt_path, state)
+
                 if self.fabric.global_rank == 0:
 
                     self.progress_bar.update(
                         task,
                         train_epoch_status=f"train_loss: {train_loss_gathered.float().mean():.3f}",
                     )
-
-                    state = {"model": model, "optimizer": optimizer, "iteration": epoch}
-                    self.fabric.save(ckpt_path, state)
 
                     if self.logger is not None:
                         self.logger.log(
@@ -255,17 +255,15 @@ class Trainer(object):
                     val_metrics = self.validation_step(
                         model=model, val_dataloader=val_dataloader, task=task2
                     )
-
+                    gathered_res = self.fabric.all_gather(val_metrics)
                     if self.fabric.global_rank == 0:
-                        gathered_res = self.fabric.all_gather(val_metrics)
-
                         for metric, value in gathered_res.items():
                             gathered_res[metric] = value.float().mean()
                             if self.logger is not None:
                                 self.logger.log({metric: value.item()})
 
-                        val_loss = gathered_res["val_loss"]
-                        val_acc = gathered_res["val_acc"]
+                        val_loss = gathered_res["val_loss"].item()
+                        val_acc = gathered_res["val_acc"].item()
 
                         pbar.remove_task(task2)
                         pbar.update(
@@ -273,26 +271,26 @@ class Trainer(object):
                             val_epoch_status=f"val_loss: {val_loss:.3f}, val_acc: {val_acc:.3f}",
                         )
 
-                        if val_loss < self.best_val_loss:
-                            print(
-                                f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
-                            )
-                            self.best_val_loss = val_loss
-                            best_state = {
-                                "model": model,
-                                "optimizer": optimizer,
-                                "iteration": epoch,
-                            }
-                            self.fabric.save(
-                                os.path.join(
-                                    self.model_dir,
-                                    "best_models",
-                                    self.model_name,
-                                ),
-                                best_state,
-                            )
+                    if val_loss < self.best_val_loss:
+                        print(
+                            f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
+                        )
+                        self.best_val_loss = val_loss
+                        best_state = {
+                            "model": model,
+                            "optimizer": optimizer,
+                            "iteration": epoch,
+                        }
+                        self.fabric.save(
+                            os.path.join(
+                                self.model_dir,
+                                "best_models",
+                                self.model_name,
+                            ),
+                            best_state,
+                        )
 
-                            print("Saved the best model checkpoint!")
+                        print("Saved the best model checkpoint!")
 
                 if scheduler is not None:
                     scheduler.step()
@@ -324,18 +322,21 @@ class Trainer(object):
                 optimizer.step()
                 optimizer.zero_grad()
 
-            if self.logger is not None:
-                self.logger.log({"train_step_loss": loss})
-
             losses.append(loss.item())
 
             loss_gathered = self.fabric.all_gather(loss)
+
             if self.fabric.global_rank == 0:
                 self.progress_bar.update(
                     task,
                     advance=1,
                     train_step_status=f"train_step_loss: {loss_gathered.float().mean().item():.3f}",
                 )
+
+                if self.logger is not None:
+                    self.logger.log(
+                        {"train_step_loss": loss_gathered.float().mean().item()}
+                    )
 
         return np.mean(losses)
 
@@ -390,22 +391,17 @@ class Trainer(object):
         assert isinstance(attention_mask, list), "Expected attention_mask to be a list"
 
         n_chunks = [len(x) for x in input_ids]
+        size = list(set(x.size(-1) for x in input_ids))[0]
 
-        input_ids_combined, attention_mask_combined = list(), list()
+        input_ids_combined, attention_mask_combined = torch.empty(0, size).to(
+            self.device
+        ), torch.empty(0, size).to(self.device)
 
         for x, a in zip(input_ids, attention_mask):
-            input_ids_combined.extend(x.tolist())
-            attention_mask_combined.extend(a.tolist())
+            input_ids_combined = torch.cat((input_ids_combined, x))
+            attention_mask_combined = torch.cat((attention_mask_combined, a))
 
-        input_ids_combined_tensor = torch.stack(
-            [torch.tensor(x).to(self.device) for x in input_ids_combined]
-        )
-
-        attention_mask_combined_tensor = torch.stack(
-            [torch.tensor(x).to(self.device) for x in attention_mask_combined]
-        )
-
-        preds = model(input_ids_combined_tensor, attention_mask_combined_tensor)
+        preds = model(input_ids_combined.long(), attention_mask_combined.int())
 
         preds_split = preds.split(n_chunks)
 
@@ -420,11 +416,7 @@ class Trainer(object):
 
         del n_chunks
         del input_ids_combined
-        del input_ids_combined_tensor
         del attention_mask_combined
-        del attention_mask_combined_tensor
-
-        gc.collect()
 
         return pooled_preds
 
