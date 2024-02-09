@@ -220,16 +220,6 @@ if __name__ == "__main__":
         collate_fn=collate_fn_pooled_tokens,
     )
 
-    for batch in train_dl:
-        sizes = [x.size() for x in batch[0]]
-        problematic = list(filter(lambda x: x[-1] > context_length, sizes))
-        if len(problematic):
-            raise Exception(
-                f"There are issues with your Dataset Builder. Apparently there are instances in your data which have the sizes {problematic} more than your context length {context_length}"
-            )
-
-    exit(0)
-
     model = BertBasedLM(n_classes=df["Assigned_Group_fixed"].n_unique())
 
     torch.cuda.empty_cache()
