@@ -112,7 +112,7 @@ class Trainer(object):
             TextColumn("[#d4b483]{task.fields[train_step_status]}"),
             TextColumn("[#c1666b]{task.fields[train_epoch_status]}"),
             TextColumn("[#4357ad]{task.fields[val_epoch_status]}"),
-            expand=True,
+            expand=False,
         )
 
         self.best_val_loss = float("inf")
