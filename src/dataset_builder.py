@@ -88,9 +88,6 @@ class SupportTicketDataset(td.Dataset):
         if self.is_bert_based:
             for i in range(len(tensor_chunks)):
                 pad_len = self.context_length - tensor_chunks[i].size(-1)
-                print(
-                    f"Context length: {self.context_length}, Input length: {tensor_chunks[i].size(-1)}, Pad length: {pad_len}"
-                )
 
                 if pad_len > 0:
                     tensor_chunks[i] = torch.cat(
@@ -168,23 +165,13 @@ class SupportTicketDataset(td.Dataset):
             ), f"Expected attention_mask to have context length : {self.context_length}. Found {attention_mask.size()} -- chunk section"
 
         else:
-
-            input_ids, attention_mask = self._add_special_tokens(
-                tensor_chunks=[input_ids], mask_chunks=[attention_mask]
-            )
-            print("Before Pad: ", input_ids[0].shape)
-
-            input_ids, attention_mask = self._add_padding_tokens(
-                tensor_chunks=input_ids, mask_chunks=attention_mask
-            )
-            print("After Pad: ", input_ids[0].shape)
-
-            input_ids, attention_mask = self._stack_all_tensors(
-                tensor_chunks=input_ids, mask_chunks=attention_mask
+            input_ids, attention_mask = self._tokenize_text(
+                text=clean_text, do_truncate=True, do_pad=True, add_special_tokens=True
             )
 
-            if input_ids.size(-1) > 512:
-                print(clean_text)
+            input_ids, attention_mask = input_ids.reshape(
+                1, -1
+            ), attention_mask.reshape(1, -1)
 
             assert (
                 input_ids.size(-1) <= 512
