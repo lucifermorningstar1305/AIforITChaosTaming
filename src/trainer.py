@@ -19,7 +19,7 @@ from rich.progress import (
 )
 
 torch.set_float32_matmul_precision("medium")
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "caching_allocator"
+# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "caching_allocator"
 
 
 class Trainer(object):
