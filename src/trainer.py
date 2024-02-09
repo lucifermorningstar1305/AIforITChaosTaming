@@ -241,6 +241,7 @@ class Trainer(object):
                         self.logger.log(
                             {"train_loss": train_loss_gathered.float().mean()}
                         )
+                        self.logger.log({"epoch": epoch})
 
                 if val_dataloader is not None:
                     task2 = pbar.add_task(
