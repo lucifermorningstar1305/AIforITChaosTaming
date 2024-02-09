@@ -225,9 +225,22 @@ class Trainer(object):
                     task=task,
                 )
 
-                self.progress_bar.update(
-                    task, train_epoch_status=f"train_loss: {train_loss:.3f}"
-                )
+                train_loss_gathered = self.fabric.all_gather(train_loss)
+
+                if self.fabric.global_rank == 0:
+
+                    self.progress_bar.update(
+                        task,
+                        train_epoch_status=f"train_loss: {train_loss_gathered.float().mean():.3f}",
+                    )
+
+                    state = {"model": model, "optimizer": optimizer, "iteration": epoch}
+                    self.fabric.save(ckpt_path, state)
+
+                    if self.logger is not None:
+                        self.logger.log(
+                            {"train_loss": train_loss_gathered.float().mean()}
+                        )
 
                 if val_dataloader is not None:
                     task2 = pbar.add_task(
@@ -242,48 +255,43 @@ class Trainer(object):
                         model=model, val_dataloader=val_dataloader, task=task2
                     )
 
-                    if self.logger is not None:
-                        for metric, value in val_metrics.items():
-                            self.logger.log({metric: value})
+                    if self.fabric.global_rank == 0:
+                        gathered_res = self.fabric.all_gather(val_metrics)
 
-                    val_loss = val_metrics["val_loss"]
-                    val_acc = val_metrics["val_acc"]
-                    val_prec = val_metrics["val_prec"]
-                    val_rec = val_metrics["val_rec"]
-                    val_f1 = val_metrics["val_f1"]
+                        for metric, value in gathered_res.items():
+                            gathered_res[metric] = value.float().mean()
+                            if self.logger is not None:
+                                self.logger.log({metric: value.item()})
 
-                    pbar.remove_task(task2)
-                    pbar.update(
-                        task,
-                        val_epoch_status=f"val_loss: {val_loss:.3f}, val_acc: {val_acc:.3f}, val_prec: {val_prec:.3f}, val_recall: {val_rec:.3f}, val_f1: {val_f1:.3f}",
-                    )
+                        val_loss = gathered_res["val_loss"]
+                        val_acc = gathered_res["val_acc"]
 
-                    if val_loss < self.best_val_loss:
-                        print(
-                            f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
-                        )
-                        self.best_val_loss = val_loss
-                        best_state = {
-                            "model": model,
-                            "optimizer": optimizer,
-                            "iteration": epoch,
-                        }
-                        self.fabric.save(
-                            os.path.join(
-                                self.model_dir,
-                                "best_models",
-                                self.model_name,
-                            ),
-                            best_state,
+                        pbar.remove_task(task2)
+                        pbar.update(
+                            task,
+                            val_epoch_status=f"val_loss: {val_loss:.3f}, val_acc: {val_acc:.3f}",
                         )
 
-                        print("Saved the best model checkpoint!")
+                        if val_loss < self.best_val_loss:
+                            print(
+                                f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
+                            )
+                            self.best_val_loss = val_loss
+                            best_state = {
+                                "model": model,
+                                "optimizer": optimizer,
+                                "iteration": epoch,
+                            }
+                            self.fabric.save(
+                                os.path.join(
+                                    self.model_dir,
+                                    "best_models",
+                                    self.model_name,
+                                ),
+                                best_state,
+                            )
 
-                state = {"model": model, "optimizer": optimizer, "iteration": epoch}
-                self.fabric.save(ckpt_path, state)
-
-                if self.logger is not None:
-                    self.logger.log({"train_loss": train_loss})
+                            print("Saved the best model checkpoint!")
 
                 if scheduler is not None:
                     scheduler.step()

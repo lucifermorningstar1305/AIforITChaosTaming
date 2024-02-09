@@ -125,6 +125,30 @@ if __name__ == "__main__":
         help="the context length of the language model.",
     )
 
+    parser.add_argument(
+        "--n_devices",
+        type=int,
+        required=False,
+        default=1,
+        help="number of devices to use for training",
+    )
+
+    parser.add_argument(
+        "--accelerator",
+        type=str,
+        required=False,
+        default="auto",
+        help="which accelerator to use for training the model.",
+    )
+
+    parser.add_argument(
+        "--precision_strategy",
+        type=str,
+        required=False,
+        default="16",
+        help="what type of precision to use for training.",
+    )
+
     args = parser.parse_args()
 
     data_path = args.data_path
@@ -141,6 +165,9 @@ if __name__ == "__main__":
     grad_accum_steps = args.grad_accum_steps
     wandb_name = args.wandb_name
     context_length = args.context_length
+    n_devices = args.n_devices
+    accelerator = args.accelerator
+    precision_strategy = args.precision_strategy
 
     assert use_wandb in [0, 1], "Expected use_wandb to be either 0/1"
 
@@ -224,8 +251,9 @@ if __name__ == "__main__":
 
     torch.cuda.empty_cache()
     trainer = Trainer(
-        accelerator="gpu",
-        precision="16",
+        accelerator=accelerator,
+        devices=n_devices,
+        precision=precision_strategy,
         optimizer_name="adam",
         optimizer_kwargs={"betas": (0.9, 0.999), "lr": lr},
         scheduler_name="cosineAnnWarmRestarts",
