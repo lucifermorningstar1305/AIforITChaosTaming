@@ -228,11 +228,14 @@ if __name__ == "__main__":
         precision="16",
         optimizer_name="adam",
         optimizer_kwargs={"betas": (0.9, 0.999), "lr": lr},
+        scheduler_name="cosineAnnWarmRestarts",
+        scheduler_kwargs={"T_0": 5, "eta_min": 1e-8},
         model_dir=model_dir,
         model_name=model_name,
         n_epochs=n_epochs,
         grad_accum_steps=grad_accum_steps,
         logger=logger,
+        num_classes=df["Assigned_Group_fixed"].n_unique(),
     )
 
     trainer.fit(model=model, train_dataloader=train_dl, val_dataloader=val_dl)

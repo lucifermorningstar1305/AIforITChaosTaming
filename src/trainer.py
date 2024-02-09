@@ -8,6 +8,13 @@ import lightning as L
 import os
 import gc
 
+from torchmetrics.classification import (
+    MulticlassAccuracy,
+    MulticlassPrecision,
+    MulticlassF1Score,
+    MulticlassRecall,
+)
+
 from rich.progress import (
     Progress,
     BarColumn,
@@ -41,6 +48,7 @@ class Trainer(object):
         n_epochs: int = 100,
         pooling_strategy: str = "mean",
         load_best_model: bool = True,
+        num_classes: int = 1,
     ):
 
         self.fabric = L.Fabric(
@@ -109,6 +117,15 @@ class Trainer(object):
 
         self.best_val_loss = float("inf")
         self.load_best_model = load_best_model
+
+        self.accuracy_metric = MulticlassAccuracy(num_classes=num_classes).to(
+            self.device
+        )
+        self.recall_metric = MulticlassRecall(num_classes=num_classes).to(self.device)
+        self.precision_metric = MulticlassPrecision(num_classes=num_classes).to(
+            self.device
+        )
+        self.f1_metric = MulticlassF1Score(num_classes=num_classes).to(self.device)
 
         if not os.path.exists(model_dir):
             os.mkdir(model_dir)
@@ -221,14 +238,30 @@ class Trainer(object):
                         val_epoch_status="",
                     )
 
-                    val_loss = self.validation_step(
+                    val_metrics = self.validation_step(
                         model=model, val_dataloader=val_dataloader, task=task2
                     )
 
+                    if self.logger is not None:
+                        for metric, value in val_metrics.items():
+                            self.logger.log({metric: value})
+
+                    val_loss = val_metrics["val_loss"]
+                    val_acc = val_metrics["val_acc"]
+                    val_prec = val_metrics["val_prec"]
+                    val_rec = val_metrics["val_rec"]
+                    val_f1 = val_metrics["val_f1"]
+
                     pbar.remove_task(task2)
-                    pbar.update(task, val_epoch_status=f"val_loss: {val_loss:.3f}")
+                    pbar.update(
+                        task,
+                        val_epoch_status=f"val_loss: {val_loss:.3f}, val_acc: {val_acc:.3f}, val_prec: {val_prec:.3f}, val_recall: {val_rec:.3f}, val_f1: {val_f1:.3f}",
+                    )
 
                     if val_loss < self.best_val_loss:
+                        print(
+                            f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
+                        )
                         self.best_val_loss = val_loss
                         best_state = {
                             "model": model,
@@ -243,6 +276,8 @@ class Trainer(object):
                             ),
                             best_state,
                         )
+
+                        print("Saved the best model checkpoint!")
 
                 state = {"model": model, "optimizer": optimizer, "iteration": epoch}
                 self.fabric.save(ckpt_path, state)
@@ -296,11 +331,15 @@ class Trainer(object):
         val_dataloader: torch.utils.data.DataLoader,
         task: Progress,
         sanity_check: bool = False,
-    ) -> float:
+    ) -> Dict:
 
         model.eval()
 
         val_losses = list()
+        val_acc = list()
+        val_prec = list()
+        val_f1 = list()
+        val_rec = list()
         with torch.no_grad():
             for idx, batch in enumerate(val_dataloader):
                 if sanity_check and idx >= 2:
@@ -310,10 +349,20 @@ class Trainer(object):
 
                 loss = F.cross_entropy(preds, label)
                 val_losses.append(loss.item())
+                val_acc.append(self.accuracy_metric(preds, label).item())
+                val_rec.append(self.recall_metric(preds, label).item())
+                val_prec.append(self.precision_metric(preds, label).item())
+                val_f1.append(self.f1_metric(preds, label).item())
 
                 self.progress_bar.update(task, advance=1)
 
-        return np.mean(val_losses)
+        return {
+            "val_loss": np.mean(val_losses),
+            "val_acc": np.mean(val_acc),
+            "val_rec": np.mean(val_rec),
+            "val_prec": np.mean(val_prec),
+            "val_f1": np.mean(val_f1),
+        }
 
     def _calc_single_batch(
         self, model: nn.Module, batch: Tuple[torch.Tensor]
