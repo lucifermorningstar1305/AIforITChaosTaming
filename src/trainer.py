@@ -177,7 +177,7 @@ class Trainer(object):
             val_dataloader = self.fabric.setup_dataloaders(val_dataloader)
 
         ####################################################################
-        ################### SANITY CHECKING #########################
+        ################### SANITY CHECKING ################################
         ####################################################################
 
         if val_dataloader is not None:
@@ -218,9 +218,6 @@ class Trainer(object):
 
                 train_loss_gathered = self.fabric.all_gather(train_loss)
 
-                state = {"model": model, "optimizer": optimizer, "iteration": epoch}
-                self.fabric.save(ckpt_path, state)
-
                 if self.fabric.global_rank == 0:
 
                     self.progress_bar.update(
@@ -233,6 +230,9 @@ class Trainer(object):
                             {"train_loss": train_loss_gathered.float().mean()}
                         )
                         self.logger.log({"epoch": epoch})
+
+                    state = {"model": model, "optimizer": optimizer, "iteration": epoch}
+                    self.fabric.save(ckpt_path, state)
 
                 if val_dataloader is not None:
                     task2 = pbar.add_task(
