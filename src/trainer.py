@@ -257,26 +257,26 @@ class Trainer(object):
                             val_epoch_status=f"val_loss: {val_loss:.3f}, val_acc: {val_acc:.3f}",
                         )
 
-                    if val_loss < self.best_val_loss:
-                        print(
-                            f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
-                        )
-                        self.best_val_loss = val_loss
-                        best_state = {
-                            "model": model,
-                            "optimizer": optimizer,
-                            "iteration": epoch,
-                        }
-                        self.fabric.save(
-                            os.path.join(
-                                self.model_dir,
-                                "best_models",
-                                self.model_name,
-                            ),
-                            best_state,
-                        )
+                        if val_loss < self.best_val_loss:
+                            print(
+                                f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
+                            )
+                            self.best_val_loss = val_loss
+                            best_state = {
+                                "model": model,
+                                "optimizer": optimizer,
+                                "iteration": epoch,
+                            }
+                            self.fabric.save(
+                                os.path.join(
+                                    self.model_dir,
+                                    "best_models",
+                                    self.model_name,
+                                ),
+                                best_state,
+                            )
 
-                        print("Saved the best model checkpoint!")
+                            print("Saved the best model checkpoint!")
 
                 if scheduler is not None:
                     scheduler.step()
