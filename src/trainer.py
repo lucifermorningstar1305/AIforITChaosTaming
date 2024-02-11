@@ -48,7 +48,7 @@ class Trainer(object):
         n_epochs: int = 100,
         pooling_strategy: str = "mean",
         load_best_model: bool = True,
-        num_classes: int = 1,
+        eval_metrics: Optional[Dict] = None,
     ):
 
         self.fabric = L.Fabric(
@@ -118,14 +118,11 @@ class Trainer(object):
         self.best_val_loss = float("inf")
         self.load_best_model = load_best_model
 
-        self.accuracy_metric = MulticlassAccuracy(num_classes=num_classes).to(
-            self.device
-        )
-        self.recall_metric = MulticlassRecall(num_classes=num_classes).to(self.device)
-        self.precision_metric = MulticlassPrecision(num_classes=num_classes).to(
-            self.device
-        )
-        self.f1_metric = MulticlassF1Score(num_classes=num_classes).to(self.device)
+        self.eval_metrics = eval_metrics
+
+        if self.eval_metrics is not None:
+            for k, v in self.eval_metrics.items():
+                self.eval_metrics[k] = v.to(self.device)
 
         if not os.path.exists(model_dir):
             os.mkdir(model_dir)
@@ -364,10 +361,16 @@ class Trainer(object):
 
                 loss = F.cross_entropy(preds, label)
                 val_losses.append(loss.item())
-                val_acc.append(self.accuracy_metric(preds, label).item())
-                val_rec.append(self.recall_metric(preds, label).item())
-                val_prec.append(self.precision_metric(preds, label).item())
-                val_f1.append(self.f1_metric(preds, label).item())
+
+                for metric, fn in self.eval_metrics.items():
+                    if metric == "accuracy":
+                        val_acc.append(fn(preds, label).item())
+                    if metric == "recall":
+                        val_rec.append(fn(preds, label).item())
+                    if metric == "precision":
+                        val_prec.append(fn(preds, label).item())
+                    if metric == "f1":
+                        val_f1.append(fn(preds, label).item())
 
                 self.progress_bar.update(task, advance=1)
 

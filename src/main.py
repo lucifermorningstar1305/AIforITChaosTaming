@@ -5,6 +5,8 @@ import torch
 import torch.utils.data as td
 import argparse
 import wandb
+import json
+import torchmetrics
 import os
 import sys
 
@@ -18,15 +20,20 @@ from models import BertBasedLM
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--data_path", type=str, required=True, help="the dataset path")
     parser.add_argument(
-        "--test_size",
-        type=float,
-        required=False,
-        default=0.2,
-        help="the amount of data for the test set",
+        "--train_data_path",
+        type=str,
+        required=True,
+        help="the dataset path for the training set.",
     )
 
+    parser.add_argument(
+        "--val_data_path",
+        type=str,
+        required=False,
+        default=None,
+        help="the dataset path for the validation set.",
+    )
     parser.add_argument(
         "--train_batch_size",
         type=int,
@@ -159,7 +166,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    data_path = args.data_path
+    train_data_path = args.train_data_path
+    val_data_path = args.val_data_path
     test_size = args.test_size
     train_batch_size = args.train_batch_size
     test_batch_size = args.test_batch_size
@@ -185,29 +193,14 @@ if __name__ == "__main__":
         wandb.init(project="AIforITOpsChaos", name=wandb_name)
         logger = wandb
 
-    df = pol.read_csv(data_path)
+    df_train = pol.read_csv(train_data_path)
+    df_val = None
 
-    label_map = {
-        k: idx for idx, k in enumerate(df["Assigned_Group_fixed"].unique().to_list())
-    }
-
-    df = df.with_columns(
-        (pol.col("Assigned_Group_fixed").map_dict(label_map)).alias("label")
-    )
-
-    df_train, df_test = train_test_split(
-        df,
-        test_size=test_size,
-        random_state=32,
-        shuffle=True,
-        stratify=df.select("label"),
-    )
-
-    df_val, df_test = train_test_split(df_test, test_size=0.5, shuffle=False)
+    if val_data_path is not None:
+        df_val = pol.read_csv(val_data_path)
 
     print(f"Shape of the training data: {df_train.shape}")
     print(f"Shape of the validation data: {df_val.shape}")
-    print(f"Shape of the test data: {df_test.shape}")
 
     tokenizer = AutoTokenizer.from_pretrained(hf_lm, verbose=0)
 
@@ -217,21 +210,6 @@ if __name__ == "__main__":
         is_bert_based=True,
         context_length=context_length,
     )
-
-    val_ds = SupportTicketDataset(
-        data=df_val,
-        tokenizer=tokenizer,
-        is_bert_based=True,
-        context_length=context_length,
-    )
-
-    test_ds = SupportTicketDataset(
-        data=df_test,
-        tokenizer=tokenizer,
-        is_bert_based=True,
-        context_length=context_length,
-    )
-
     train_dl = td.DataLoader(
         train_ds,
         batch_size=train_batch_size,
@@ -240,23 +218,37 @@ if __name__ == "__main__":
         collate_fn=collate_fn_pooled_tokens,
     )
 
-    val_dl = td.DataLoader(
-        val_ds,
-        batch_size=test_batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        collate_fn=collate_fn_pooled_tokens,
-    )
+    val_dl = None
 
-    test_dl = td.DataLoader(
-        test_ds,
-        batch_size=test_batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        collate_fn=collate_fn_pooled_tokens,
-    )
+    if df_val is not None:
+        val_ds = SupportTicketDataset(
+            data=df_val,
+            tokenizer=tokenizer,
+            is_bert_based=True,
+            context_length=context_length,
+        )
 
-    model = BertBasedLM(n_classes=df["Assigned_Group_fixed"].n_unique())
+        val_dl = td.DataLoader(
+            val_ds,
+            batch_size=test_batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            collate_fn=collate_fn_pooled_tokens,
+        )
+
+    with open("../data/voda_idea_data_splits/label_map.json", "r") as fp:
+        label_map = json.load(fp)
+
+    n_classes = len(list(label_map.keys()))
+
+    model = BertBasedLM(n_classes=n_classes)
+
+    eval_metrics = {
+        "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=n_classes),
+        "precision": torchmetrics.Precision(task="multiclass", num_classes=n_classes),
+        "recall": torchmetrics.Recall(task="multiclass", num_classes=n_classes),
+        "f1": torchmetrics.F1Score(task="multiclass", num_classes=n_classes),
+    }
 
     torch.cuda.empty_cache()
     trainer = Trainer(
@@ -273,7 +265,7 @@ if __name__ == "__main__":
         n_epochs=n_epochs,
         grad_accum_steps=grad_accum_steps,
         logger=logger,
-        num_classes=df["Assigned_Group_fixed"].n_unique(),
+        eval_metrics=eval_metrics,
     )
 
     trainer.fit(model=model, train_dataloader=train_dl, val_dataloader=val_dl)
