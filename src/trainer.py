@@ -248,7 +248,7 @@ class Trainer(object):
                             model=model, val_dataloader=val_dataloader, task=task2
                         )
 
-                        for metric, val in val_metrics:
+                        for metric, val in val_metrics.items():
                             self.logger.log({metric: val})
 
                         val_loss = val_metrics["val_loss"].item()
