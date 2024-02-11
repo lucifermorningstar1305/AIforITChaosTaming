@@ -353,7 +353,7 @@ class Trainer(object):
             for idx, batch in enumerate(val_dataloader):
                 if sanity_check and idx >= 2:
                     break
-                preds = self._calc_single_batch(model=model, batch=batch, val_mode=True)
+                preds = self._calc_single_batch(model=model, batch=batch)
                 label = torch.stack(batch[-1])
 
                 loss = F.cross_entropy(preds, label)
@@ -380,14 +380,13 @@ class Trainer(object):
         }
 
     def _calc_single_batch(
-        self, model: nn.Module, batch: Tuple[torch.Tensor], val_mode: bool = False
+        self, model: nn.Module, batch: Tuple[torch.Tensor]
     ) -> torch.Tensor:
         """Function to evaluate single batch"""
 
         input_ids = batch[0]
         attention_mask = batch[1]
-
-        device = "cuda:0" if val_mode else self.device
+        device = self.device
 
         assert isinstance(input_ids, list), "Expected input_ids to be a list"
         assert isinstance(attention_mask, list), "Expected attention_mask to be a list"
@@ -400,12 +399,6 @@ class Trainer(object):
         ), torch.empty(0, size).to(device)
 
         for x, a in zip(input_ids, attention_mask):
-
-            if val_mode and x.device == torch.device("cpu"):
-                x = x.to("cuda:0")
-            if val_mode and a.device == torch.device("cpu"):
-                a = a.to("cuda:0")
-
             input_ids_combined = torch.cat((input_ids_combined, x))
             attention_mask_combined = torch.cat((attention_mask_combined, a))
 
