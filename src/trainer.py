@@ -96,7 +96,7 @@ class Trainer(object):
 
         self.progress_bar = Progress(
             TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=None, table_column=Column(ratio=2)),
+            BarColumn(),
             MofNCompleteColumn(),
             TextColumn("◦"),
             TimeElapsedColumn(),
