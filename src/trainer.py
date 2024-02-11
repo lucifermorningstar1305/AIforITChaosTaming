@@ -8,12 +8,6 @@ import lightning as L
 import os
 import gc
 
-from torchmetrics.classification import (
-    MulticlassAccuracy,
-    MulticlassPrecision,
-    MulticlassF1Score,
-    MulticlassRecall,
-)
 
 from rich.progress import (
     Progress,
