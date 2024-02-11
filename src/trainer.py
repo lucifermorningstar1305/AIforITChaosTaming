@@ -397,9 +397,9 @@ class Trainer(object):
 
         for x, a in zip(input_ids, attention_mask):
             if x.device == "cpu":
-                x = x.to(device)
+                x = x.to("cuda:0")
             if a.device == "cpu":
-                a = a.to(device)
+                a = a.to("cuda:0")
 
             input_ids_combined = torch.cat((input_ids_combined, x))
             attention_mask_combined = torch.cat((attention_mask_combined, a))
