@@ -396,6 +396,7 @@ class Trainer(object):
         ), torch.empty(0, size).to(device)
 
         for x, a in zip(input_ids, attention_mask):
+            print(x.device, a.device)
             if x.device == "cpu":
                 x = x.to("cuda:0")
             if a.device == "cpu":
