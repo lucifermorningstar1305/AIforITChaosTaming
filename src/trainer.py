@@ -174,7 +174,9 @@ class Trainer(object):
         model, optimizer = self.fabric.setup(model, optimizer)
         train_dataloader = self.fabric.setup_dataloaders(train_dataloader)
         if val_dataloader is not None:
-            val_dataloader = self.fabric.setup_dataloaders(val_dataloader)
+            val_dataloader = self.fabric.setup_dataloaders(
+                val_dataloader, move_to_device=False, use_distributed_sampler=False
+            )
 
         ####################################################################
         ################### SANITY CHECKING ################################
@@ -234,7 +236,7 @@ class Trainer(object):
                     state = {"model": model, "optimizer": optimizer, "iteration": epoch}
                     self.fabric.save(ckpt_path, state)
 
-                if val_dataloader is not None:
+                if val_dataloader is not None and self.fabric.global_rank == 0:
                     task2 = pbar.add_task(
                         description="Validation",
                         total=len(val_dataloader),
@@ -243,43 +245,42 @@ class Trainer(object):
                         val_epoch_status="",
                     )
 
-                    if self.fabric.global_rank == 0:
-                        val_metrics = self.validation_step(
-                            model=model, val_dataloader=val_dataloader, task=task2
+                    val_metrics = self.validation_step(
+                        model=model, val_dataloader=val_dataloader, task=task2
+                    )
+
+                    for metric, val in val_metrics.items():
+                        self.logger.log({metric: val})
+
+                    val_loss = val_metrics["val_loss"].item()
+                    val_acc = val_metrics["val_acc"].item()
+
+                    pbar.remove_task(task2)
+                    pbar.update(
+                        task,
+                        val_epoch_status=f"val_loss: {val_loss:.3f}, val_acc: {val_acc:.3f}",
+                    )
+
+                    if val_loss < self.best_val_loss:
+                        print(
+                            f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
+                        )
+                        self.best_val_loss = val_loss
+                        best_state = {
+                            "model": model,
+                            "optimizer": optimizer,
+                            "iteration": epoch,
+                        }
+                        self.fabric.save(
+                            os.path.join(
+                                self.model_dir,
+                                "best_models",
+                                self.model_name,
+                            ),
+                            best_state,
                         )
 
-                        for metric, val in val_metrics.items():
-                            self.logger.log({metric: val})
-
-                        val_loss = val_metrics["val_loss"].item()
-                        val_acc = val_metrics["val_acc"].item()
-
-                        pbar.remove_task(task2)
-                        pbar.update(
-                            task,
-                            val_epoch_status=f"val_loss: {val_loss:.3f}, val_acc: {val_acc:.3f}",
-                        )
-
-                        if val_loss < self.best_val_loss:
-                            print(
-                                f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
-                            )
-                            self.best_val_loss = val_loss
-                            best_state = {
-                                "model": model,
-                                "optimizer": optimizer,
-                                "iteration": epoch,
-                            }
-                            self.fabric.save(
-                                os.path.join(
-                                    self.model_dir,
-                                    "best_models",
-                                    self.model_name,
-                                ),
-                                best_state,
-                            )
-
-                            print("Saved the best model checkpoint!")
+                        print("Saved the best model checkpoint!")
 
                 if scheduler is not None:
                     scheduler.step()
@@ -375,12 +376,14 @@ class Trainer(object):
         }
 
     def _calc_single_batch(
-        self, model: nn.Module, batch: Tuple[torch.Tensor]
+        self, model: nn.Module, batch: Tuple[torch.Tensor], val_mode: bool = False
     ) -> torch.Tensor:
         """Function to evaluate single batch"""
 
         input_ids = batch[0]
         attention_mask = batch[1]
+
+        device = "cuda:0" if val_mode else self.device
 
         assert isinstance(input_ids, list), "Expected input_ids to be a list"
         assert isinstance(attention_mask, list), "Expected attention_mask to be a list"
@@ -389,8 +392,8 @@ class Trainer(object):
         size = list(set(x.size(-1) for x in input_ids))[0]
 
         input_ids_combined, attention_mask_combined = torch.empty(0, size).to(
-            self.device
-        ), torch.empty(0, size).to(self.device)
+            device
+        ), torch.empty(0, size).to(device)
 
         for x, a in zip(input_ids, attention_mask):
             input_ids_combined = torch.cat((input_ids_combined, x))
