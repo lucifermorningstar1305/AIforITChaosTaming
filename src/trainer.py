@@ -174,9 +174,7 @@ class Trainer(object):
         model, optimizer = self.fabric.setup(model, optimizer)
         train_dataloader = self.fabric.setup_dataloaders(train_dataloader)
         if val_dataloader is not None:
-            val_dataloader = self.fabric.setup_dataloaders(
-                val_dataloader, move_to_device=False, use_distributed_sampler=False
-            )
+            val_dataloader = self.fabric.setup_dataloaders(val_dataloader)
 
         ####################################################################
         ################### SANITY CHECKING ################################
