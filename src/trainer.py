@@ -222,7 +222,7 @@ class Trainer(object):
 
                     self.progress_bar.update(
                         task,
-                        train_epoch_status=f"train_loss: {train_loss_gathered.float().mean():.3f}",
+                        train_epoch_status=f"train_loss: {train_loss_gathered.float().mean():.2f}",
                     )
 
                     if self.logger is not None:
@@ -258,7 +258,7 @@ class Trainer(object):
                     pbar.remove_task(task2)
                     pbar.update(
                         task,
-                        val_epoch_status=f"val_loss: {val_loss:.3f}, val_acc: {val_acc:.3f}",
+                        val_epoch_status=f"val_loss: {val_loss:.2f}, val_acc: {val_acc:.2f}",
                     )
 
                     if val_loss < self.best_val_loss:
@@ -322,7 +322,7 @@ class Trainer(object):
                 self.progress_bar.update(
                     task,
                     advance=1,
-                    train_step_status=f"loss: {loss_gathered.float().mean().item():.3f}",
+                    train_step_status=f"loss: {loss_gathered.float().mean().item():.2f}",
                 )
 
                 if self.logger is not None:
