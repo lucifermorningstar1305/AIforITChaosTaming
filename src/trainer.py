@@ -243,18 +243,13 @@ class Trainer(object):
                         val_epoch_status="",
                     )
 
-                    val_metrics = self.validation_step(
-                        model=model, val_dataloader=val_dataloader, task=task2
-                    )
-                    gathered_res = self.fabric.all_gather(val_metrics)
                     if self.fabric.global_rank == 0:
-                        for metric, value in gathered_res.items():
-                            gathered_res[metric] = value.float().mean()
-                            if self.logger is not None:
-                                self.logger.log({metric: value.item()})
+                        val_metrics = self.validation_step(
+                            model=model, val_dataloader=val_dataloader, task=task2
+                        )
 
-                        val_loss = gathered_res["val_loss"].item()
-                        val_acc = gathered_res["val_acc"].item()
+                        val_loss = val_metrics["val_loss"].item()
+                        val_acc = val_metrics["val_acc"].item()
 
                         pbar.remove_task(task2)
                         pbar.update(
