@@ -349,7 +349,7 @@ class Trainer(object):
             for idx, batch in enumerate(val_dataloader):
                 if sanity_check and idx >= 2:
                     break
-                preds = self._calc_single_batch(model=model, batch=batch)
+                preds = self._calc_single_batch(model=model, batch=batch, val_mode=True)
                 label = torch.stack(batch[-1])
 
                 loss = F.cross_entropy(preds, label)
