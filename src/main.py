@@ -168,7 +168,6 @@ if __name__ == "__main__":
 
     train_data_path = args.train_data_path
     val_data_path = args.val_data_path
-    test_size = args.test_size
     train_batch_size = args.train_batch_size
     test_batch_size = args.test_batch_size
     model_dir = args.model_dir
