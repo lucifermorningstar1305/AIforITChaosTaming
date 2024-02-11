@@ -322,13 +322,11 @@ class Trainer(object):
                 self.progress_bar.update(
                     task,
                     advance=1,
-                    train_step_status=f"train_step_loss: {loss_gathered.float().mean().item():.3f}",
+                    train_step_status=f"loss: {loss_gathered.float().mean().item():.3f}",
                 )
 
                 if self.logger is not None:
-                    self.logger.log(
-                        {"train_step_loss": loss_gathered.float().mean().item()}
-                    )
+                    self.logger.log({"loss": loss_gathered.float().mean().item()})
 
         return np.mean(losses)
 
