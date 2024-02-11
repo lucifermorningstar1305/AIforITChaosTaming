@@ -396,6 +396,11 @@ class Trainer(object):
         ), torch.empty(0, size).to(device)
 
         for x, a in zip(input_ids, attention_mask):
+            if x.device == "cpu":
+                x = x.to(device)
+            if a.device == "cpu":
+                a = a.to(device)
+
             input_ids_combined = torch.cat((input_ids_combined, x))
             attention_mask_combined = torch.cat((attention_mask_combined, a))
 
