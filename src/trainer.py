@@ -236,6 +236,8 @@ class Trainer(object):
                     state = {"model": model, "optimizer": optimizer, "iteration": epoch}
                     self.fabric.save(ckpt_path, state)
 
+                self.fabric.barrier(name="model_save")
+
                 if val_dataloader is not None and self.fabric.global_rank == 0:
                     task2 = pbar.add_task(
                         description="Validation",
@@ -281,6 +283,8 @@ class Trainer(object):
                         )
 
                         print("Saved the best model checkpoint!")
+
+                self.fabric.barrier(name="best_model_save")
 
                 if scheduler is not None:
                     scheduler.step()
