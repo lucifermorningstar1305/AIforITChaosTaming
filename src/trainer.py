@@ -218,7 +218,7 @@ class Trainer(object):
 
                 train_loss_gathered = self.fabric.all_gather(train_loss)
 
-                if self.fabric.global_rank == 0:
+                with self.fabric.rank_zero_first():
 
                     self.progress_bar.update(
                         task,
@@ -234,9 +234,7 @@ class Trainer(object):
                     state = {"model": model, "optimizer": optimizer, "iteration": epoch}
                     self.fabric.save(ckpt_path, state)
 
-                self.fabric.barrier(name="model_save")
-
-                if val_dataloader is not None and self.fabric.global_rank == 0:
+                if val_dataloader is not None:
                     task2 = pbar.add_task(
                         description="Validation",
                         total=len(val_dataloader),
@@ -249,40 +247,41 @@ class Trainer(object):
                         model=model, val_dataloader=val_dataloader, task=task2
                     )
 
-                    for metric, val in val_metrics.items():
-                        self.logger.log({metric: val})
+                    with self.fabric.rank_zero_first():
+                        gathered_metrics = self.fabric.all_gather(val_metrics)
+                        for metric, val in gathered_metrics.items():
+                            gathered_metrics[metric] = val.float().mean()
+                            self.logger.log({metric: gathered_metrics[metric]})
 
-                    val_loss = val_metrics["val_loss"].item()
-                    val_acc = val_metrics["val_acc"].item()
+                        val_loss = gathered_metrics["val_loss"].item()
+                        val_acc = gathered_metrics["val_acc"].item()
 
-                    pbar.remove_task(task2)
-                    pbar.update(
-                        task,
-                        val_epoch_status=f"val_loss: {val_loss:.2f}, val_acc: {val_acc:.2f}",
-                    )
-
-                    if val_loss < self.best_val_loss:
-                        print(
-                            f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
-                        )
-                        self.best_val_loss = val_loss
-                        best_state = {
-                            "model": model,
-                            "optimizer": optimizer,
-                            "iteration": epoch,
-                        }
-                        self.fabric.save(
-                            os.path.join(
-                                self.model_dir,
-                                "best_models",
-                                self.model_name,
-                            ),
-                            best_state,
+                        pbar.remove_task(task2)
+                        pbar.update(
+                            task,
+                            val_epoch_status=f"val_loss: {val_loss:.2f}, val_acc: {val_acc:.2f}",
                         )
 
-                        print("Saved the best model checkpoint!")
+                        if val_loss < self.best_val_loss:
+                            print(
+                                f"Obtained a best validation loss : {val_loss} which is less than {self.best_val_loss}"
+                            )
+                            self.best_val_loss = val_loss
+                            best_state = {
+                                "model": model,
+                                "optimizer": optimizer,
+                                "iteration": epoch,
+                            }
+                            self.fabric.save(
+                                os.path.join(
+                                    self.model_dir,
+                                    "best_models",
+                                    self.model_name,
+                                ),
+                                best_state,
+                            )
 
-                self.fabric.barrier(name="best_model_save")
+                            print("Saved the best model checkpoint!")
 
                 if scheduler is not None:
                     scheduler.step()
