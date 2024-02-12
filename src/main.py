@@ -1,5 +1,6 @@
 import numpy as np
 import polars as pol
+import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 import torch
 import torch.utils.data as td
@@ -10,11 +11,13 @@ import torchmetrics
 import os
 import sys
 
-from sklearn.model_selection import train_test_split
+from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
+from pytorch_lightning.loggers.wandb import WandbLogger
 from transformers import AutoTokenizer, AutoModel
 from dataset_builder import SupportTicketDataset
 from utils import collate_fn_pooled_tokens
 from trainer import Trainer
+from ligthning_trainer import LigthningModel
 from models import BertBasedLM
 
 if __name__ == "__main__":
@@ -189,8 +192,9 @@ if __name__ == "__main__":
 
     logger = None
     if use_wandb:
-        wandb.init(project="AIforITOpsChaos", name=wandb_name)
-        logger = wandb
+        # wandb.init(project="AIforITOpsChaos", name=wandb_name)
+        # logger = wandb
+        logger = WandbLogger(name=wandb_name, project="AIforITOpsChaos")
 
     df_train = pol.read_csv(train_data_path)
     df_val = None
@@ -250,21 +254,52 @@ if __name__ == "__main__":
     }
 
     torch.cuda.empty_cache()
-    trainer = Trainer(
-        accelerator=accelerator,
-        devices=n_devices,
-        strategy=gpu_strategy,
-        precision=precision_strategy,
+    # trainer = Trainer(
+    #     accelerator=accelerator,
+    #     devices=n_devices,
+    #     strategy=gpu_strategy,
+    #     precision=precision_strategy,
+    #     optimizer_name="adam",
+    #     optimizer_kwargs={"betas": (0.9, 0.999), "lr": lr},
+    #     scheduler_name="cosineAnnWarmRestarts",
+    #     scheduler_kwargs={"T_0": 5, "eta_min": 1e-8},
+    #     model_dir=model_dir,
+    #     model_name=model_name,
+    #     n_epochs=n_epochs,
+    #     grad_accum_steps=grad_accum_steps,
+    #     logger=logger,
+    #     eval_metrics=eval_metrics,
+    # )
+
+    lit_model = LigthningModel(
+        model=model,
         optimizer_name="adam",
-        optimizer_kwargs={"betas": (0.9, 0.999), "lr": lr},
-        scheduler_name="cosineAnnWarmRestarts",
-        scheduler_kwargs={"T_0": 5, "eta_min": 1e-8},
-        model_dir=model_dir,
-        model_name=model_name,
-        n_epochs=n_epochs,
-        grad_accum_steps=grad_accum_steps,
-        logger=logger,
+        optimizer_kwargs={"betas": (0.9, 0.99), "lr": lr},
+        scheduler_name="cosineAnnWarm",
+        scheduler_kwargs={"T_0": 10_000, "eta_min": 5e-8},
         eval_metrics=eval_metrics,
     )
-
-    trainer.fit(model=model, train_dataloader=train_dl, val_dataloader=val_dl)
+    lightning_callbacks = [
+        ModelCheckpoint(
+            dirpath=model_dir,
+            filename=model_name,
+            monitor="val_loss",
+            mode="min",
+            save_on_train_epoch_end=True,
+        ),
+        RichProgressBar(),
+    ]
+    trainer = pl.Trainer(
+        accelerator=accelerator,
+        strategy=gpu_strategy,
+        devices=n_devices,
+        precision=precision_strategy,
+        logger=logger,
+        callbacks=lightning_callbacks,
+        max_epochs=n_epochs,
+        min_epochs=3,
+        val_check_interval=1.0,
+        sync_batchnorm=True,
+        accumulate_grad_batches=grad_accum_steps,
+    )
+    trainer.fit(model=lit_model, train_dataloaders=train_dl, val_dataloaders=val_dl)

@@ -5,3 +5,4 @@
 test.py
 **/dataset/
 **/wandb/
+**/lightning_logs/
