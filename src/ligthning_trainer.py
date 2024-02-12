@@ -6,17 +6,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 
+from torchmetrics import MetricCollection
+from torchmetrics.classification import (
+    MulticlassAccuracy,
+    MulticlassPrecision,
+    MulticlassRecall,
+    MulticlassF1Score,
+)
+
 
 class LigthningModel(pl.LightningModule):
     def __init__(
         self,
         model: nn.Module,
+        n_classes: int,
         optimizer_name: str,
         optimizer_kwargs: Dict,
         scheduler_name: Optional[str] = None,
         scheduler_kwargs: Optional[Dict] = None,
         pred_pooling_strategy: str = "mean",
-        eval_metrics: Optional[Dict] = None,
     ):
         super().__init__()
 
@@ -26,12 +34,17 @@ class LigthningModel(pl.LightningModule):
         self.scheduler_name = scheduler_name
         self.scheduler_kwargs = scheduler_kwargs
         self.pred_pooling_strategy = pred_pooling_strategy
-        self.eval_metrics = None
 
-        if eval_metrics is not None:
-            self.eval_metrics = {}
-            for metric, fn in eval_metrics.items():
-                self.eval_metrics[metric] = fn.to("cuda")
+        metrics = MetricCollection(
+            [
+                MulticlassAccuracy(num_classes=n_classes),
+                MulticlassPrecision(num_classes=n_classes),
+                MulticlassRecall(num_classes=n_classes),
+                MulticlassF1Score(num_classes=n_classes),
+            ]
+        )
+
+        self.eval_metrics = metrics.clone(prefix="val_")
 
         self.optimizer_map = {
             "adam": torch.optim.Adam,
@@ -146,23 +159,19 @@ class LigthningModel(pl.LightningModule):
             batch_size=val_res["batch_size"],
         )
 
-        val_metrics = dict()
+        metric_res = self.eval_metrics(val_res["preds"], val_res["labels"])
+        self.log_dict(
+            metric_res,
+            prog_bar=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            rank_zero_only=True,
+            logger=True,
+            batch_size=val_res["batch_size"],
+        )
 
-        for metric, fn in self.eval_metrics.items():
-            val_metrics[f"val_{metric}"] = fn(val_res["preds"], val_res["labels"])
-            self.log(
-                f"val_{metric}",
-                val_metrics[f"val_{metric}"],
-                prog_bar=False,
-                logger=True,
-                on_epoch=True,
-                on_step=False,
-                sync_dist=True,
-                rank_zero_only=True,
-                batch_size=val_res["batch_size"],
-            )
-
-        return {"val_loss": val_loss, **val_metrics}
+        return {"val_loss": val_loss}
 
     def configure_optimizers(self) -> Any:
 

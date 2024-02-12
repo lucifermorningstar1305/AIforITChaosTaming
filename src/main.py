@@ -246,12 +246,12 @@ if __name__ == "__main__":
 
     model = BertBasedLM(n_classes=n_classes)
 
-    eval_metrics = {
-        "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=n_classes),
-        "precision": torchmetrics.Precision(task="multiclass", num_classes=n_classes),
-        "recall": torchmetrics.Recall(task="multiclass", num_classes=n_classes),
-        "f1": torchmetrics.F1Score(task="multiclass", num_classes=n_classes),
-    }
+    # eval_metrics = {
+    #     "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=n_classes),
+    #     "precision": torchmetrics.Precision(task="multiclass", num_classes=n_classes),
+    #     "recall": torchmetrics.Recall(task="multiclass", num_classes=n_classes),
+    #     "f1": torchmetrics.F1Score(task="multiclass", num_classes=n_classes),
+    # }
 
     torch.cuda.empty_cache()
     # trainer = Trainer(
@@ -273,11 +273,11 @@ if __name__ == "__main__":
 
     lit_model = LigthningModel(
         model=model,
+        n_classes=n_classes,
         optimizer_name="adam",
         optimizer_kwargs={"betas": (0.9, 0.99), "lr": lr},
         scheduler_name="cosineAnnWarm",
         scheduler_kwargs={"T_0": 10_000, "eta_min": 5e-8},
-        eval_metrics=eval_metrics,
     )
     lightning_callbacks = [
         ModelCheckpoint(
