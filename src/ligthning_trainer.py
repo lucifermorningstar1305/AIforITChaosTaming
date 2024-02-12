@@ -93,7 +93,7 @@ class LigthningModel(pl.LightningModule):
             input_ids_combined = torch.cat((input_ids_combined, x))
             attention_mask_combined = torch.cat((attention_mask_combined, a))
 
-        preds = self.model(input_ids_combined.long(), attention_mask_combined.int())
+        preds = self(input_ids_combined.long(), attention_mask_combined.int())
         preds_split = preds.split(n_chunks)
 
         if self.pred_pooling_strategy == "mean":
