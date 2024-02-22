@@ -6,3 +6,5 @@ test.py
 **/dataset/
 **/wandb/
 **/lightning_logs/
+**/.env
+**/logs
