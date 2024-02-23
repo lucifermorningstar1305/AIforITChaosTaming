@@ -126,7 +126,7 @@ if __name__ == "__main__":
                 time.sleep(60)
 
             n_records += 1
-            print(f"Number of records parsed: {idx}, Number of correct: {n_correct}")
+            print(f"Number of records parsed: {n_records}, Number of correct: {n_correct}")
         except Exception as e:
             logging.error(e)
 
