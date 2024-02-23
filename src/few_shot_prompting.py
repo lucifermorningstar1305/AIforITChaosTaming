@@ -100,6 +100,15 @@ if __name__ == "__main__":
     n_correct = 0
     n_records = 0
 
+    if os.path.exists('./status.txt'): 
+        with open("./status.txt", "r") as fp:
+            status = fp.readline()
+
+        status = list(map(lambda x: int(x), status.split()))
+        df_new = df_new.slice(status[0])
+        n_correct = status[1]
+        n_records = status[2]
+
     for idx, row in enumerate(df_new.rows(named=True)):
 
         try:
@@ -111,6 +120,9 @@ if __name__ == "__main__":
                 n_correct += 1
 
             if idx % 60 == 0 and idx != 0:
+                with open("./status.txt", "w") as fp:
+                    fp.write(f"{idx} {n_correct} {n_records}")
+                
                 time.sleep(60)
 
             n_records += 1
