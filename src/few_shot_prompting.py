@@ -131,3 +131,6 @@ if __name__ == "__main__":
             logging.error(e)
 
     print(f"Number of correct : {n_correct} / {n_records}")
+
+    if os.path.exists("./status.txt"):
+        os.remove("./status.txt")
