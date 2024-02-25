@@ -4,6 +4,7 @@ import argparse
 import time
 import os
 import logging
+import json
 
 from dotenv import load_dotenv
 from langchain_community.chat_models import ChatCohere
@@ -97,40 +98,40 @@ if __name__ == "__main__":
     # ans = chain.invoke({"email": df_new["clean_text"].to_list()[0]})
     # print(type(ans), ans.content, df_new["Assigned_Group_fixed"].to_list()[0])
 
-    n_correct = 0
-    n_records = 0
+    response = list()
 
-    if os.path.exists('./status.txt'): 
-        with open("./status.txt", "r") as fp:
-            status = fp.readline()
 
-        status = list(map(lambda x: int(x), status.split()))
-        df_new = df_new.slice(status[0])
-        n_correct = status[1]
-        n_records = status[2]
+    if not os.path.exists("../responses"):
+        os.mkdir("../responses")
+
 
     for idx, row in enumerate(df_new.rows(named=True)):
 
+        _temp_res = dict()
+
         try:
+            _id = row["Incident_No"]
             email = row["clean_text"]
             label = row["Assigned_Group_fixed"]
-
+            _temp_res["id"] = _id
+            _temp_res["email"] = email
+            _temp_res["label"] = label
             llm_ans = chain.invoke({"email": email})
-            if llm_ans.content == label:
-                n_correct += 1
+            _temp_res["llm_response"] = llm_ans.content
 
-            if idx % 60 == 0 and idx != 0:
-                with open("./status.txt", "w") as fp:
-                    fp.write(f"{idx} {n_correct} {n_records}")
-                
+            print(f"{idx} | Incident: {_id} Label: {label} Pred: {llm_ans.content}")
+
+            response.append(_temp_res)
+
+            if idx % 60 == 0 and idx != 0:                
                 time.sleep(60)
 
-            n_records += 1
-            print(f"Number of records parsed: {n_records}, Number of correct: {n_correct}")
         except Exception as e:
             logging.error(e)
 
-    print(f"Number of correct : {n_correct} / {n_records}")
-
     if os.path.exists("./status.txt"):
         os.remove("./status.txt")
+
+    
+    with open(f"../responses/{response}_{n_examples * len(unique_labels)}_shot.json", "w") as fp:
+        json.dump(response, fp)
