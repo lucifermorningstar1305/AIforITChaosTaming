@@ -58,29 +58,36 @@ if __name__ == "__main__":
             n=n_examples, shuffle=True, with_replacement=True, seed=32
         )
         clean_text = _sampled_data["clean_text"].to_list()
-        clean_texts.append(clean_text)
+        clean_texts.extend(clean_text)
 
         grps = _sampled_data["Assigned_Group_fixed"].to_list()
         labels.extend(grps)
 
     examples = list()
 
-    for email, label in zip(clean_text, labels):
-        examples.append({"email": email, "label": label})
+
+    for email, label in zip(clean_texts, labels):
+        examples.append({"input": email, "output": label})
 
     df_new = df.filter(~pol.col("clean_text").is_in(clean_text))
 
     example_prompt = ChatPromptTemplate.from_messages(
-        [("human", "{email}"), ("ai", "{label}")]
+        [("human", "{input}"), ("ai", "{output}")]
     )
     few_shot_prompt = FewShotChatMessagePromptTemplate(
         example_prompt=example_prompt, examples=examples
     )
 
+    print(few_shot_prompt.format())
+
+    print("\n"*2)
+    print("-"*20)
+    print("\n")
+
     final_prompt = ChatPromptTemplate.from_messages(
         [
             few_shot_prompt,
-            ("human", "{email}"),
+            ("human", "{input}"),
         ]
     )
 
@@ -88,7 +95,7 @@ if __name__ == "__main__":
         model="gemini-pro",
         google_api_key=os.getenv("GEMINI_KEY"),
         temperature=0.0,
-        convert_system_message_to_human=True,
+        # convert_system_message_to_human=True,
     )
 
     # chain = final_prompt | ChatOpenAI(
@@ -116,7 +123,7 @@ if __name__ == "__main__":
             _temp_res["id"] = _id
             _temp_res["email"] = email
             _temp_res["label"] = label
-            llm_ans = chain.invoke({"email": email})
+            llm_ans = chain.invoke({"input": email})
             _temp_res["llm_response"] = llm_ans.content
 
             print(f"{idx} | Incident: {_id} Label: {label} Pred: {llm_ans.content}")
