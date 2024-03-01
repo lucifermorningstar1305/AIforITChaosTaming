@@ -50,6 +50,8 @@ if __name__ == "__main__":
 
     unique_labels = df["Assigned_Group_fixed"].unique().to_list()
 
+    print(unique_labels)
+
     clean_texts = list()
     labels = list()
 
@@ -86,6 +88,7 @@ if __name__ == "__main__":
 
     final_prompt = ChatPromptTemplate.from_messages(
         [
+            ("system", f"Predict the labels for the corresponding emails. The output should be either one of the following labels {unique_labels}"),
             few_shot_prompt,
             ("human", "{input}"),
         ]
@@ -95,13 +98,12 @@ if __name__ == "__main__":
         model="gemini-pro",
         google_api_key=os.getenv("GEMINI_KEY"),
         temperature=0.0,
-        # convert_system_message_to_human=True,
+        convert_system_message_to_human=True,
     )
 
     # chain = final_prompt | ChatOpenAI(
     #     temperature=0, openai_api_key=os.getenv("OPENAI_KEY")
     # )
-
     # ans = chain.invoke({"email": df_new["clean_text"].to_list()[0]})
     # print(type(ans), ans.content, df_new["Assigned_Group_fixed"].to_list()[0])
 
@@ -140,5 +142,5 @@ if __name__ == "__main__":
         os.remove("./status.txt")
 
     
-    with open(f"../responses/{response}_{n_examples * len(unique_labels)}_shot.json", "w") as fp:
+    with open(f"../responses/response_{n_examples * len(unique_labels)}_shot.json", "w") as fp:
         json.dump(response, fp)
