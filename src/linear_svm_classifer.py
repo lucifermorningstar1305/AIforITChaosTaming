@@ -57,7 +57,8 @@ for name, classifier in zip(names, classifiers):
     test_Y = test.iloc[:,8].astype('U').values
 
     proba = clf.decision_function(test_X)
-    platt_proba = (1./(1.+np.exp(-proba)))
+#     platt_proba = (1./(1.+np.exp(-proba)))
+    platt_proba = np.exp(proba) / np.sum(np.exp(proba), axis=1, keepdims=True)
     predictions = clf.predict(test_X)
     
 
