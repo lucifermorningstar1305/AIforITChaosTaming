@@ -67,7 +67,6 @@ if __name__ == "__main__":
 
     examples = list()
 
-
     for email, label in zip(clean_texts, labels):
         examples.append({"input": email, "output": label})
 
@@ -81,14 +80,18 @@ if __name__ == "__main__":
     )
 
     print(few_shot_prompt.format())
+    exit(0)
 
-    print("\n"*2)
-    print("-"*20)
+    print("\n" * 2)
+    print("-" * 20)
     print("\n")
 
     final_prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", f"Predict the labels for the corresponding emails. The output should be either one of the following labels {unique_labels}"),
+            (
+                "system",
+                f"Predict the labels for the corresponding emails. The output should be either one of the following labels {unique_labels}",
+            ),
             few_shot_prompt,
             ("human", "{input}"),
         ]
@@ -109,10 +112,8 @@ if __name__ == "__main__":
 
     response = list()
 
-
     if not os.path.exists("../responses"):
         os.mkdir("../responses")
-
 
     for idx, row in enumerate(df_new.rows(named=True)):
 
@@ -132,7 +133,7 @@ if __name__ == "__main__":
 
             response.append(_temp_res)
 
-            if idx % 60 == 0 and idx != 0:                
+            if idx % 60 == 0 and idx != 0:
                 time.sleep(60)
 
         except Exception as e:
@@ -141,6 +142,7 @@ if __name__ == "__main__":
     if os.path.exists("./status.txt"):
         os.remove("./status.txt")
 
-    
-    with open(f"../responses/response_{n_examples * len(unique_labels)}_shot.json", "w") as fp:
+    with open(
+        f"../responses/response_{n_examples * len(unique_labels)}_shot.json", "w"
+    ) as fp:
         json.dump(response, fp)
